@@ -98,12 +98,12 @@ static VALUE t_info(VALUE self) {
 
 
 	
-	VALUE result;
+	VALUE result, result1;
 	if(bartlby_address != NULL) {
 		shm_hdr=(struct shm_header *)(void *)bartlby_address;
 		
 		result = rb_hash_new();
-
+		result1 = rb_hash_new();
 		
 		rb_hash_aset(result, ID2SYM(rb_intern("services")),INT2FIX(shm_hdr->svccount));
 		rb_hash_aset(result, ID2SYM(rb_intern("workers")),INT2FIX(shm_hdr->wrkcount));
@@ -122,6 +122,12 @@ static VALUE t_info(VALUE self) {
 		rb_hash_aset(result, ID2SYM(rb_intern("servergroups")),INT2FIX(shm_hdr->srvgroupcount));
 		rb_hash_aset(result, ID2SYM(rb_intern("checks_performed")),INT2FIX(shm_hdr->checks_performed));
 		rb_hash_aset(result, ID2SYM(rb_intern("checks_performed_time")),INT2FIX(shm_hdr->checks_performed_time));
+
+
+		rb_hash_aset(result1, ID2SYM(rb_intern("checks_performed_time")),INT2FIX(shm_hdr->checks_performed_time));
+
+
+		rb_hash_aset(result, ID2SYM(rb_intern("hash2")),result1);
 
 		
 		
