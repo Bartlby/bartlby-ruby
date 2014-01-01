@@ -1,3 +1,6 @@
+*.o
+Makefile
+*.so
 *.gem
 *.rbc
 .bundle
