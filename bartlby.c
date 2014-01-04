@@ -1,19 +1,54 @@
 #include "ruby.h"
 #include <sys/types.h>
 #include <sys/shm.h>
-
+#include <dlfcn.h>
 #include "bartlby.h"
 
 
-static char * shmtok;
-static	int shm_id;
-static	void * bartlby_address;
-static struct shm_header * shm_hdr;
-static char * cfgfile;
+
+struct bartlby_ruby_cfg {
+
+	
+	void * bartlby_address;
+	char * cfgfile;
+	void * SOHandle;
+	
+
+		
+};
 
 
 
 static int id_push;
+static char * dlmsg;
+
+
+void * bartlby_get_shm();
+char * getConfigValue(char * key, char * fname);
+
+
+void * bartlby_get_sohandle(char * cfgfile) {
+	char * data_lib;
+	void * SOHandle;
+	
+	
+	data_lib=getConfigValue("data_library", cfgfile);
+	if(data_lib == NULL) {
+			//php_error(E_WARNING, "cannot find data_lib key in %s", cfgfile);	
+			return NULL;
+	}
+	SOHandle=dlopen(data_lib, RTLD_LAZY);
+	if((dlmsg=dlerror()) != NULL) {
+					//php_error(E_ERROR, "DL Error: %s", dlmsg);
+        	return NULL;
+    	}	
+    	free(data_lib);
+    	return SOHandle;
+} 
+
+
+
+
 
 char * getConfigValue(char * key, char * fname) {
 	FILE * fp;
@@ -60,7 +95,10 @@ char * getConfigValue(char * key, char * fname) {
 
 
 
-void * bartlby_get_shm() {
+void * bartlby_get_shm(char * cfgfile) {
+	char * shmtok;
+	void * bartlby_address;
+	int shm_id;
 
 	shmtok = getConfigValue("shm_key",cfgfile );
 	if(shmtok == NULL) {
@@ -77,20 +115,106 @@ void * bartlby_get_shm() {
 		return bartlby_address;
 	} else {
 		//FIXME ERROR ATTACHING
-		return Qnil;
+		return NULL;
 	}
+
+	
+}
+
+
+void bartlby_res_free() {
+	
 }
 
 static VALUE t_initialize(VALUE self, VALUE obj) {
-	cfgfile=RSTRING_PTR(obj);
-	bartlby_get_shm();
-	return 1;
+
+
+
+//	cfgfile=RSTRING_PTR(obj);
+	
+	
+	struct bartlby_ruby_cfg * bartlby_ruby;
+	Data_Get_Struct(self, struct bartlby_ruby_cfg, bartlby_ruby);
+	
+	
+	bartlby_ruby->cfgfile=RSTRING_PTR(obj);
+	bartlby_ruby->bartlby_address=bartlby_get_shm(bartlby_ruby->cfgfile);
+	bartlby_ruby->SOHandle=bartlby_get_sohandle(bartlby_ruby->cfgfile);
+
+	
+	
+	
+	
+	return Qnil;
+	//return self;
 }
 
 
+static VALUE t_lib_info(VALUE self) {
+	
 
-static VALUE t_close() {
-	shmdt(bartlby_address);	
+	VALUE result;
+	
+	char * (*GetAutor)();
+	char * (*GetVersion)();
+	char * (*GetName)();
+	char * GetAutorStr;
+	char * GetVersionStr;
+	char * GetNameStr;
+	
+
+	struct bartlby_ruby_cfg * bartlby_ruby;
+	Data_Get_Struct(self, struct bartlby_ruby_cfg, bartlby_ruby);
+
+
+
+	
+	LOAD_SYMBOL(GetAutor,bartlby_ruby->SOHandle, "GetAutor");
+  LOAD_SYMBOL(GetVersion,bartlby_ruby->SOHandle, "GetVersion");
+  LOAD_SYMBOL(GetName,bartlby_ruby->SOHandle, "GetName");
+    	
+	GetAutorStr=GetAutor();
+  GetVersionStr=GetVersion();
+  GetNameStr=GetName();
+    	
+ 
+ 	
+ 	result = rb_hash_new();
+ 	
+ 	rb_hash_aset(result, ID2SYM(rb_intern("autor")),rb_str_new2(GetAutorStr));
+ 	rb_hash_aset(result, ID2SYM(rb_intern("version")),rb_str_new2(GetVersionStr));
+ 	rb_hash_aset(result, ID2SYM(rb_intern("name")),rb_str_new2(GetNameStr));
+ 	
+ 	
+ 	free(GetAutorStr);
+	free(GetVersionStr);
+	free(GetNameStr);
+	
+	return result;
+ 	
+
+ 	
+	/*
+	add_assoc_string(return_value, "Autor", GetAutorStr, 1);
+	add_assoc_string(return_value, "Version", GetVersionStr, 1);
+	add_assoc_string(return_value, "Name", GetNameStr, 1);
+	
+	
+	dlclose(SOHandle);
+	*/
+    		
+}
+static VALUE t_close(VALUE self) {
+	/*
+	
+	*/
+	struct bartlby_ruby_cfg * bartlby_ruby;
+	Data_Get_Struct(self, struct bartlby_ruby_cfg, bartlby_ruby);
+	
+	shmdt(bartlby_ruby->bartlby_address);	
+	if(bartlby_ruby->SOHandle != NULL) dlclose(bartlby_ruby->SOHandle); 
+	
+	
 	return Qnil;
 }
 static VALUE t_info(VALUE self) {
@@ -99,8 +223,14 @@ static VALUE t_info(VALUE self) {
 
 	
 	VALUE result, result1;
-	if(bartlby_address != NULL) {
-		shm_hdr=(struct shm_header *)(void *)bartlby_address;
+	struct shm_header * shm_hdr;
+	
+	struct bartlby_ruby_cfg * bartlby_ruby;
+	Data_Get_Struct(self, struct bartlby_ruby_cfg, bartlby_ruby);
+
+	
+	if(bartlby_ruby->bartlby_address != NULL) {
+		shm_hdr=(struct shm_header *)(void *)bartlby_ruby->bartlby_address;
 		
 		result = rb_hash_new();
 		result1 = rb_hash_new();
@@ -136,14 +266,27 @@ static VALUE t_info(VALUE self) {
 		
 		return result;	
 	} else {
-		//return void;
+		
 		return Qnil;
 	}
 	
 	
 	
-	
+
 }
+
+VALUE  t_alloc(VALUE self){
+	
+	VALUE instance = Qnil;
+  struct bartlby_ruby_cfg * bartlby_ruby;
+
+
+   
+	bartlby_ruby=malloc(sizeof(struct bartlby_ruby_cfg));
+	instance = Data_Wrap_Struct(self, 0, free, bartlby_ruby);
+	return instance;
+ }
+ 
 
 static VALUE t_add(VALUE self, VALUE obj)
 {
@@ -156,8 +299,12 @@ static VALUE t_add(VALUE self, VALUE obj)
 VALUE cBartlby;
 void Init_bartlby() {
   cBartlby = rb_define_class("Bartlby", rb_cObject);
+  
+  rb_define_alloc_func(cBartlby, t_alloc);
+  
   rb_define_method(cBartlby, "initialize", t_initialize, 1);
   rb_define_method(cBartlby, "close", t_close, 0);
+  rb_define_method(cBartlby, "lib_info", t_lib_info, 0);
   rb_define_method(cBartlby, "info", t_info, 0);
   rb_define_method(cBartlby, "add", t_add, 1);
   id_push = rb_intern("push");

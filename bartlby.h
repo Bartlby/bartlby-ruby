@@ -1,3 +1,9 @@
+#define LOAD_SYMBOL(x,y,z) 	x=dlsym(y, z); \
+    	if((dlmsg=dlerror()) != NULL) { \
+					return Qnil; \
+    	}
+    	
+    	
 #define BARTLBY_VERSION "1.5.0"
 
 #define BARTLBY_SERVICE_GONE 1
