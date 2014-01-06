@@ -1,4 +1,6 @@
-require "bartlby"
+#!/usr/bin/ruby
+
+require "bartlby/bartlby"
 
 cfg1 ="/storage/SF.NET/BARTLBY/GIT/bartlby-ruby/../bartlby-core/BARTLBY.local"
 
